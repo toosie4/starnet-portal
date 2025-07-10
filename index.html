@@ -1368,64 +1368,70 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1000);
   }
 
-  // 4) Verify & Activate
-  payButton.addEventListener('click', verifyPayment);
+ async function verifyPayment() {
+  const phone = document.getElementById('payPhone').value.trim();
+  if (!/^0\d{9}$/.test(phone)) {
+    alert("Enter a valid 10‑digit M‑Pesa number (e.g., 0712345678).");
+    return;
+  }
 
-  async function verifyPayment() {
-    const phone = document.getElementById('payPhone').value.trim();
-    if (!/^0\d{9}$/.test(phone)) {
-      alert("Enter a valid 10‑digit M‑Pesa number (e.g., 0712345678).");
+  buttonText.style.display     = 'none';
+  buttonSpinner.style.display  = 'inline-block';
+  payButton.disabled           = true;
+  paymentConfirm.style.display = 'block';
+  retryMsg.style.display       = 'none';
+  startTimer();
+
+  const payload = {
+    phone,
+    amount: currentPackage.price,
+    package: currentPackage.title,
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    const resp = await fetch(`${API_BASE}${VERIFY_PATH}`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    let result = {};
+    try {
+      result = await resp.json();
+    } catch (err) {
+      console.warn("Failed to parse JSON:", err);
+      alert("Server returned an unexpected response. Please try again.");
+      resetModal();
       return;
     }
 
-    buttonText.style.display     = 'none';
-    buttonSpinner.style.display  = 'inline-block';
-    payButton.disabled           = true;
-    paymentConfirm.style.display = 'block';
-    retryMsg.style.display       = 'none';
-    startTimer();
-
-    const payload = {
-      phone,
-      amount: currentPackage.price,
-      package: currentPackage.title,
-      timestamp: new Date().toISOString()
-    };
-
-    try {
-      const resp = await fetch(`${API_BASE}${VERIFY_PATH}`, {
+    if (result.status === 'paid') {
+      clearInterval(countdownTimer);
+      await fetch(`${API_BASE}${ACTIVATE_PATH}`, {
         method: 'POST',
         headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          phone,
+          package: currentPackage.title,
+          amount: currentPackage.price,
+          cycle: currentPackage.cycle
+        })
       });
-      const result = await resp.json();
-
-      if (result.status === 'paid') {
-        clearInterval(countdownTimer);
-        await fetch(`${API_BASE}${ACTIVATE_PATH}`, {
-          method: 'POST',
-          headers: { 'Content-Type':'application/json' },
-          body: JSON.stringify({
-            phone,
-            package: currentPackage.title,
-            amount: currentPackage.price,
-            cycle: currentPackage.cycle
-          })
-        });
-        showSuccess();
-      } else {
-        retryCount++;
-        retryMsg.style.display      = 'block';
-        buttonSpinner.style.display = 'none';
-        buttonText.style.display    = 'inline';
-        payButton.disabled          = false;
-      }
-    } catch (err) {
-      console.error("API Error:", err);
-      alert("Network error – please try again.");
-      resetModal();
+      showSuccess();
+    } else {
+      retryCount++;
+      retryMsg.style.display      = 'block';
+      buttonSpinner.style.display = 'none';
+      buttonText.style.display    = 'inline';
+      payButton.disabled          = false;
     }
+  } catch (err) {
+    console.error("API Error:", err);
+    alert("Network error – please try again.");
+    resetModal();
   }
+}
 
   // 5) Success
   function showSuccess() {
