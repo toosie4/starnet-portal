@@ -1249,7 +1249,7 @@
   <script>
 document.addEventListener('DOMContentLoaded', () => {
   // CONFIG
-  const API_BASE      = "https://n8n.starnetai.website";
+  const API_BASE      = '';               // empty = same origin (your Worker)
   const VERIFY_PATH   = "/api/payment";
   const ACTIVATE_PATH = "/api/activate";
   const MAX_RETRIES   = 2;
@@ -1261,19 +1261,19 @@ document.addEventListener('DOMContentLoaded', () => {
   let countdownTimer = null;
 
   // ELEMENTS
-  const modal         = document.getElementById('packageModal');
-  const successModal  = document.getElementById('successMessage');
-  const payButton     = document.getElementById('payButton');
-  const buttonText    = document.getElementById('buttonText');
-  const buttonSpinner = document.getElementById('buttonSpinner');
-  const paymentConfirm= document.getElementById('paymentConfirm');
-  const timerEl       = document.getElementById('timer');
-  const retryMsg      = document.getElementById('retryMessage');
-  const retryLink     = document.getElementById('retryLink');
-  const closeButtons  = modal.querySelectorAll('.close');
-  const modalTitle    = document.getElementById('modalTitle');
-  const modalPrice    = document.getElementById('modalPrice');
-  const modalDesc     = document.getElementById('modalDesc');
+  const modal          = document.getElementById('packageModal');
+  const successModal   = document.getElementById('successMessage');
+  const payButton      = document.getElementById('payButton');
+  const buttonText     = document.getElementById('buttonText');
+  const buttonSpinner  = document.getElementById('buttonSpinner');
+  const paymentConfirm = document.getElementById('paymentConfirm');
+  const timerEl        = document.getElementById('timer');
+  const retryMsg       = document.getElementById('retryMessage');
+  const retryLink      = document.getElementById('retryLink');
+  const closeButtons   = modal.querySelectorAll('.close');
+  const modalTitle     = document.getElementById('modalTitle');
+  const modalPrice     = document.getElementById('modalPrice');
+  const modalDesc      = document.getElementById('modalDesc');
 
   // Success Screen Elements
   const successPlan     = document.getElementById('successPackage');
@@ -1334,10 +1334,10 @@ document.addEventListener('DOMContentLoaded', () => {
         clearInterval(countdownTimer);
         if (retryCount < MAX_RETRIES) {
           retryCount++;
-          retryMsg.style.display = 'block';
-          buttonSpinner.style.display = 'none';
-          buttonText.style.display    = 'inline';
-          payButton.disabled          = false;
+          retryMsg.style.display        = 'block';
+          buttonSpinner.style.display   = 'none';
+          buttonText.style.display      = 'inline';
+          payButton.disabled            = false;
         } else {
           alert("Payment not found. Please contact support.");
           closeModal();
@@ -1351,7 +1351,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function verifyPayment() {
     const phoneInput = document.getElementById('payPhone');
-    const phone = phoneInput.value.trim();
+    const phone      = phoneInput.value.trim();
 
     if (!/^0\d{9}$/.test(phone)) {
       alert("Enter a valid 10‑digit M‑Pesa number (e.g., 0712345678).");
@@ -1359,11 +1359,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // UI locks
-    buttonText.style.display    = 'none';
-    buttonSpinner.style.display = 'inline-block';
-    payButton.disabled          = true;
-    paymentConfirm.style.display= 'block';
-    retryMsg.style.display      = 'none';
+    buttonText.style.display     = 'none';
+    buttonSpinner.style.display  = 'inline-block';
+    payButton.disabled           = true;
+    paymentConfirm.style.display = 'block';
+    retryMsg.style.display       = 'none';
     startTimer();
 
     const payload = {
@@ -1374,19 +1374,20 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     try {
-      const resp = await fetch(API_BASE + VERIFY_PATH, {
+      // 4a) Verify payment via Worker proxy
+      const resp = await fetch(`${API_BASE}${VERIFY_PATH}`, {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: { 'Content-Type':'application/json' },
         body: JSON.stringify(payload)
       });
       const result = await resp.json();
 
       if (result.status === 'paid') {
         clearInterval(countdownTimer);
-        // Activate
-        await fetch(API_BASE + ACTIVATE_PATH, {
+        // 4b) Activate account via Worker proxy
+        await fetch(`${API_BASE}${ACTIVATE_PATH}`, {
           method: 'POST',
-          headers: {'Content-Type':'application/json'},
+          headers: { 'Content-Type':'application/json' },
           body: JSON.stringify({
             phone,
             package: currentPackage.title,
@@ -1397,7 +1398,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showSuccess();
       } else {
         retryCount++;
-        retryMsg.style.display = 'block';
+        retryMsg.style.display      = 'block';
         buttonSpinner.style.display = 'none';
         buttonText.style.display    = 'inline';
         payButton.disabled          = false;
@@ -1414,18 +1415,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 5) Success
   function showSuccess() {
-    document.getElementById('successPackage').textContent = currentPackage.title;
-    document.getElementById('successAmount').textContent  = `KSh ${currentPackage.price.toLocaleString()}`;
-    document.getElementById('successValidity').textContent= `1 ${currentPackage.cycle}`;
-    document.getElementById('activationTime').textContent= new Date()
-      .toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    successPlan.textContent     = currentPackage.title;
+    successAmount.textContent   = `KSh ${currentPackage.price.toLocaleString()}`;
+    successValidity.textContent = `1 ${currentPackage.cycle}`;
+    activationTime.textContent  = new Date()
+      .toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
 
     modal.classList.remove('show');
     successModal.classList.add('show');
     setTimeout(() => window.location.href = 'http://welcome.starnet.com', 180000);
   }
-
-});  
+});
 </script>
 </body>
 </html>
