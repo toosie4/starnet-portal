@@ -1367,19 +1367,25 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 1000);
   }
+  
+payButton.addEventListener('click', verifyPayment);
+ // ... (existing code remains unchanged until verifyPayment function)
 
- async function verifyPayment() {
+async function verifyPayment() {
   const phone = document.getElementById('payPhone').value.trim();
   if (!/^0\d{9}$/.test(phone)) {
     alert("Enter a valid 10‑digit M‑Pesa number (e.g., 0712345678).");
     return;
   }
 
+  // UI state updates
   buttonText.style.display     = 'none';
   buttonSpinner.style.display  = 'inline-block';
   payButton.disabled           = true;
   paymentConfirm.style.display = 'block';
   retryMsg.style.display       = 'none';
+  
+  // Start payment verification timer
   startTimer();
 
   const payload = {
@@ -1389,25 +1395,48 @@ document.addEventListener('DOMContentLoaded', () => {
     timestamp: new Date().toISOString()
   };
 
+  // Debug mode detection
+  const debugMode = new URLSearchParams(window.location.search).has('debug');
+  
   try {
+    // Enhanced fetch with timeout and status checks
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+    
     const resp = await fetch(`${API_BASE}${VERIFY_PATH}`, {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId); // Clear timeout on success
+    
+    // Handle HTTP errors
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status} - ${resp.statusText}`);
+    }
 
-    let result = {};
-    try {
-      result = await resp.json();
-    } catch (err) {
-      console.warn("Failed to parse JSON:", err);
-      alert("Server returned an unexpected response. Please try again.");
-      resetModal();
-      return;
+    const result = await resp.json();
+    
+    // Debug logging
+    if (debugMode) {
+      console.debug('[DEBUG] Payment Verification Response:');
+      console.table(result);
+    }
+    
+    // Validate response structure
+    if (typeof result !== 'object' || result === null || !('status' in result)) {
+      throw new Error('Invalid response format from server');
     }
 
     if (result.status === 'paid') {
       clearInterval(countdownTimer);
+      
+      // Activation request with timeout
+      const activateController = new AbortController();
+      const activateTimeout = setTimeout(() => activateController.abort(), 5000);
+      
       await fetch(`${API_BASE}${ACTIVATE_PATH}`, {
         method: 'POST',
         headers: { 'Content-Type':'application/json' },
@@ -1416,19 +1445,42 @@ document.addEventListener('DOMContentLoaded', () => {
           package: currentPackage.title,
           amount: currentPackage.price,
           cycle: currentPackage.cycle
-        })
+        }),
+        signal: activateController.signal
       });
+      
+      clearTimeout(activateTimeout);
       showSuccess();
     } else {
+      // Enhanced retry UI with attempt count
       retryCount++;
+      retryLink.innerHTML = `Retry (${retryCount}/${MAX_RETRIES})`;
       retryMsg.style.display      = 'block';
       buttonSpinner.style.display = 'none';
       buttonText.style.display    = 'inline';
       payButton.disabled          = false;
+      
+      // Debug logging for failed payment
+      if (debugMode && result.reason) {
+        console.debug('[DEBUG] Payment failed:', result.reason);
+      }
     }
   } catch (err) {
     console.error("API Error:", err);
-    alert("Network error – please try again.");
+    
+    // User-friendly timeout message
+    if (err.name === 'AbortError') {
+      alert("Request timed out - please check your connection");
+    } 
+    // Handle structured JSON errors
+    else if (err.message.startsWith('HTTP')) {
+      alert(`Payment verification failed: ${err.message}`);
+    } 
+    // Handle validation errors
+    else {
+      alert("Server returned an unexpected response. Please try again.");
+    }
+    
     resetModal();
   }
 }
