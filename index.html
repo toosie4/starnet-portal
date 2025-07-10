@@ -1249,7 +1249,7 @@
   <script>
 document.addEventListener('DOMContentLoaded', () => {
   // CONFIG
-  const API_BASE      = '';               // empty = same origin (your Worker)
+  const API_BASE      = '';               // same origin = Worker proxy
   const VERIFY_PATH   = "/api/payment";
   const ACTIVATE_PATH = "/api/activate";
   const MAX_RETRIES   = 2;
@@ -1270,7 +1270,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const timerEl        = document.getElementById('timer');
   const retryMsg       = document.getElementById('retryMessage');
   const retryLink      = document.getElementById('retryLink');
-  const closeButtons   = modal.querySelectorAll('.close');
+  const closeButtons   = document.querySelectorAll('.modal .close');
   const modalTitle     = document.getElementById('modalTitle');
   const modalPrice     = document.getElementById('modalPrice');
   const modalDesc      = document.getElementById('modalDesc');
@@ -1291,27 +1291,48 @@ document.addEventListener('DOMContentLoaded', () => {
         desc: pkgEl.dataset.desc,
         cycle: pkgEl.dataset.cycle
       };
-      // Populate modal
       modalTitle.textContent = currentPackage.title;
       modalPrice.textContent = `KSh ${currentPackage.price.toLocaleString()}`;
       modalDesc.textContent = currentPackage.desc;
-      // Reset any prior state
       resetModal();
-      // Show
-      modal.classList.add('show');
-      document.body.style.overflow = 'hidden';
+      openModal(modal);
     });
   });
 
-  // 2) Close logic
-  closeButtons.forEach(b => b.addEventListener('click', closeModal));
+  // 2) Close logic for both modals
+  closeButtons.forEach(btn => btn.addEventListener('click', () => {
+    closeModal(modal);
+    closeModal(successModal);
+  }));
+
+  // Clicking outside content closes modal
+  [modal, successModal].forEach(m => {
+    m.addEventListener('click', e => {
+      if (e.target === m) closeModal(m);
+    });
+  });
+
+  // Escape key closes any open modal
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeModal(modal);
+      closeModal(successModal);
+    }
+  });
+
   retryLink.addEventListener('click', e => { e.preventDefault(); verifyPayment(); });
 
-  function closeModal() {
-    modal.classList.remove('show');
-    document.body.style.overflow = '';
-    resetModal();
+  function openModal(m) {
+    m.classList.add('show');
+    document.body.style.overflow = 'hidden';
   }
+  function closeModal(m) {
+    m.classList.remove('show');
+    document.body.style.overflow = '';
+    if (m === modal) resetModal();
+    if (m === successModal) resetModal();
+  }
+
   function resetModal() {
     clearInterval(countdownTimer);
     retryCount = 0;
@@ -1320,6 +1341,7 @@ document.addEventListener('DOMContentLoaded', () => {
     buttonSpinner.style.display = 'none';
     buttonText.style.display    = 'inline';
     payButton.disabled          = false;
+    timerEl.textContent = '';
     document.getElementById('payPhone').value = '';
   }
 
@@ -1340,7 +1362,7 @@ document.addEventListener('DOMContentLoaded', () => {
           payButton.disabled            = false;
         } else {
           alert("Payment not found. Please contact support.");
-          closeModal();
+          closeModal(modal);
         }
       }
     }, 1000);
@@ -1350,15 +1372,12 @@ document.addEventListener('DOMContentLoaded', () => {
   payButton.addEventListener('click', verifyPayment);
 
   async function verifyPayment() {
-    const phoneInput = document.getElementById('payPhone');
-    const phone      = phoneInput.value.trim();
-
+    const phone = document.getElementById('payPhone').value.trim();
     if (!/^0\d{9}$/.test(phone)) {
       alert("Enter a valid 10‑digit M‑Pesa number (e.g., 0712345678).");
       return;
     }
 
-    // UI locks
     buttonText.style.display     = 'none';
     buttonSpinner.style.display  = 'inline-block';
     payButton.disabled           = true;
@@ -1368,13 +1387,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const payload = {
       phone,
-      amount:  currentPackage.price,
+      amount: currentPackage.price,
       package: currentPackage.title,
       timestamp: new Date().toISOString()
     };
 
     try {
-      // 4a) Verify payment via Worker proxy
       const resp = await fetch(`${API_BASE}${VERIFY_PATH}`, {
         method: 'POST',
         headers: { 'Content-Type':'application/json' },
@@ -1384,7 +1402,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (result.status === 'paid') {
         clearInterval(countdownTimer);
-        // 4b) Activate account via Worker proxy
         await fetch(`${API_BASE}${ACTIVATE_PATH}`, {
           method: 'POST',
           headers: { 'Content-Type':'application/json' },
@@ -1406,10 +1423,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       console.error("API Error:", err);
       alert("Network error – please try again.");
-      // reset UI
-      buttonSpinner.style.display = 'none';
-      buttonText.style.display    = 'inline';
-      payButton.disabled          = false;
+      resetModal();
     }
   }
 
@@ -1421,8 +1435,9 @@ document.addEventListener('DOMContentLoaded', () => {
     activationTime.textContent  = new Date()
       .toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
 
-    modal.classList.remove('show');
-    successModal.classList.add('show');
+    closeModal(modal);
+    openModal(successModal);
+    // Auto-redirect
     setTimeout(() => window.location.href = 'http://welcome.starnet.com', 180000);
   }
 });
