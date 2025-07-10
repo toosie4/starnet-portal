@@ -1417,12 +1417,22 @@ async function verifyPayment() {
       throw new Error(`HTTP ${resp.status} - ${resp.statusText}`);
     }
 
-    const result = await resp.json();
+    let result = {};
+let raw = '';
+
+try {
+  raw = await resp.text();
+  if (!raw.trim()) throw new Error("Empty response body");
+  result = JSON.parse(raw);
+} catch (err) {
+  throw new Error(`Failed to parse JSON: ${err.message}\nRaw response:\n${raw.slice(0, 150)}`);
+}
     
     // Debug logging
     if (debugMode) {
       console.debug('[DEBUG] Payment Verification Response:');
       console.table(result);
+      console.debug('[DEBUG] Raw Response:', raw);
     }
     
     // Validate response structure
